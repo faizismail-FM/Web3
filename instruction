@@ -1,0 +1,1030 @@
+
+# Build a Web3 Document Verification Platform — ProofChain
+
+You are an expert full-stack engineer, Web3 developer, UI/UX designer, and software architect.
+
+Build a production-quality MVP called **ProofChain**.
+
+## 1. PRODUCT CONCEPT
+
+ProofChain is a Web3 document authenticity and verification platform.
+
+Organizations can upload documents and create a blockchain-backed proof that the document existed at a specific point in time and has not been modified.
+
+IMPORTANT:
+
+* Never store the actual document on the blockchain.
+* Store the document securely off-chain.
+* Calculate a SHA-256 hash of the document.
+* Store only the necessary verification information on-chain.
+* The blockchain acts as an immutable proof layer.
+* Users who are not familiar with Web3 should be able to use the application without needing to understand blockchain technology.
+
+The product should feel like a professional B2B SaaS application, NOT a typical crypto/NFT website.
+
+---
+
+# 2. TECHNOLOGY STACK
+
+Use:
+
+* Next.js
+* TypeScript
+* Tailwind CSS
+* shadcn/ui
+* PostgreSQL
+* Prisma ORM
+* Solidity
+* OpenZeppelin
+* viem
+* wagmi
+* Base Sepolia testnet for development
+
+Use a clean modular architecture.
+
+Avoid unnecessary dependencies.
+
+---
+
+# 3. DESIGN DIRECTION
+
+Create a premium modern SaaS interface.
+
+Default theme:
+
+* Light mode
+
+Also support:
+
+* Dark mode
+
+Add a theme toggle under the user profile menu.
+
+Design principles:
+
+* Clean
+* Professional
+* Minimal
+* Enterprise-ready
+* Lots of whitespace
+* Clear typography
+* Subtle borders
+* Rounded cards
+* Professional data tables
+* Responsive
+* Desktop-first but mobile responsive
+
+Do NOT make the UI look like a crypto trading platform.
+
+Avoid:
+
+* excessive neon colors
+* huge gradients
+* crypto coin graphics
+* unnecessary animations
+* NFT-style designs
+
+The blockchain aspect should feel like infrastructure operating behind the product.
+
+---
+
+# 4. APPLICATION STRUCTURE
+
+Create the following pages:
+
+/
+Landing page
+
+/login
+Login page
+
+/register
+Registration page
+
+/dashboard
+Main dashboard
+
+/documents
+Document management
+
+/documents/new
+Register a new document
+
+/documents/[id]
+Document details
+
+/verify
+Verification interface
+
+/verify/[verificationId]
+Public document verification page
+
+/organizations
+Organization management
+
+/activity
+Blockchain/activity history
+
+/settings
+User settings
+
+---
+
+# 5. LANDING PAGE
+
+Create a professional landing page.
+
+Hero:
+
+"Verify. Prove. Trust."
+
+Subtitle:
+
+"Blockchain-backed document verification for businesses."
+
+Primary CTA:
+
+"Start Verifying"
+
+Secondary CTA:
+
+"Verify a Document"
+
+Explain the product using three steps:
+
+1. Upload
+2. Register
+3. Verify
+
+Add sections for:
+
+* Document Integrity
+* Blockchain Timestamping
+* QR Verification
+* Organization Management
+* Public Verification
+
+Add a simple workflow visualization:
+
+Document
+↓
+SHA-256 Hash
+↓
+Blockchain Proof
+↓
+Verification
+
+Add a professional footer.
+
+---
+
+# 6. AUTHENTICATION
+
+Implement authentication.
+
+Users should be able to:
+
+* Register
+* Login
+* Logout
+* View profile
+* Update profile
+
+User fields:
+
+* id
+* name
+* email
+* password hash
+* organizationId
+* walletAddress
+* createdAt
+* updatedAt
+
+Do NOT store plaintext passwords.
+
+Wallet connection should be optional.
+
+---
+
+# 7. ORGANIZATIONS
+
+Users belong to organizations.
+
+Organization fields:
+
+* id
+* name
+* registrationNumber
+* email
+* walletAddress
+* createdAt
+* updatedAt
+
+Organization members should have roles:
+
+* OWNER
+* ADMIN
+* MEMBER
+* VIEWER
+
+Implement basic role-based access control.
+
+---
+
+# 8. DOCUMENT MODEL
+
+Create a Document model.
+
+Fields:
+
+* id
+* organizationId
+* uploadedBy
+* filename
+* documentType
+* fileSize
+* mimeType
+* storagePath
+* sha256Hash
+* status
+* createdAt
+* updatedAt
+
+Document status:
+
+* DRAFT
+* PENDING
+* REGISTERED
+* VERIFIED
+* FAILED
+
+Document types:
+
+* BILL_OF_LADING
+* COMMERCIAL_INVOICE
+* PACKING_LIST
+* CERTIFICATE
+* CONTRACT
+* DELIVERY_ORDER
+* OTHER
+
+Make the document type extensible.
+
+---
+
+# 9. DOCUMENT UPLOAD
+
+Create a professional upload interface.
+
+Allow:
+
+* Drag and drop
+* Browse files
+* PDF upload initially
+
+After upload:
+
+1. Validate file
+2. Calculate SHA-256 hash
+3. Store document
+4. Create database record
+5. Display calculated hash
+6. Allow blockchain registration
+
+Display:
+
+Filename
+File size
+Document type
+SHA-256 hash
+Upload date
+Current status
+
+Do not send the document itself to the blockchain.
+
+---
+
+# 10. BLOCKCHAIN SMART CONTRACT
+
+Create a Solidity smart contract called:
+
+ProofChainRegistry
+
+The contract should allow registration of document proofs.
+
+Suggested structure:
+
+DocumentProof:
+
+* bytes32 documentHash
+* address issuer
+* uint256 timestamp
+* string verificationId
+
+Create a function similar to:
+
+registerDocument(
+bytes32 documentHash,
+string calldata verificationId
+)
+
+The contract should emit an event:
+
+DocumentRegistered(
+bytes32 indexed documentHash,
+address indexed issuer,
+string verificationId,
+uint256 timestamp
+)
+
+Create a function to verify a document hash.
+
+The contract should prevent duplicate registration of the same document hash unless explicitly designed otherwise.
+
+Use OpenZeppelin where appropriate.
+
+---
+
+# 11. WEB3 INTEGRATION
+
+Use:
+
+* wagmi
+* viem
+
+Support wallet connection.
+
+Initially support:
+
+* MetaMask
+* Coinbase Wallet
+* injected wallets
+
+The user should be able to:
+
+Connect Wallet
+
+View:
+
+* wallet address
+* network
+* registration transaction
+
+Before blockchain registration show:
+
+"Register Document Proof"
+
+Information:
+
+Document:
+Bill_of_Lading_ABC123.pdf
+
+SHA-256:
+8c7a...91fe
+
+Network:
+Base Sepolia
+
+Wallet:
+0x82...91AF
+
+Then:
+
+[ Register on Blockchain ]
+
+Show transaction states:
+
+1. Preparing transaction
+2. Waiting for wallet approval
+3. Transaction submitted
+4. Confirming blockchain transaction
+5. Successfully registered
+
+Display transaction hash after completion.
+
+---
+
+# 12. VERIFICATION ID
+
+Generate a unique human-readable Verification ID.
+
+Example:
+
+PC-8F29A2
+
+The ID should be unique.
+
+Each registered document receives a verification URL:
+
+/verify/PC-8F29A2
+
+Create a QR code for the verification URL.
+
+Allow users to:
+
+* View QR code
+* Download QR code
+* Copy verification URL
+
+---
+
+# 13. PUBLIC VERIFICATION
+
+The public verification page is extremely important.
+
+A visitor should NOT need an account.
+
+Example:
+
+/verify/PC-8F29A2
+
+Display:
+
+DOCUMENT VERIFIED
+
+✓ Document hash matches
+✓ Blockchain registration found
+✓ Issuer verified
+✓ Timestamp confirmed
+
+Information:
+
+Document Type
+Bill of Lading
+
+Verification ID
+PC-8F29A2
+
+Registered By
+FM Malaysia
+
+Registered Date
+7 September 2026
+
+Blockchain
+Base Sepolia
+
+Transaction
+0x8af92...
+
+Document Hash
+8c7a...91fe
+
+Add a strong visual verification status.
+
+If the hash does not match:
+
+DOCUMENT VERIFICATION FAILED
+
+Explain clearly:
+
+"The uploaded document does not match the blockchain-registered document."
+
+Do not expose sensitive document information publicly.
+
+---
+
+# 14. VERIFY UPLOADED DOCUMENT
+
+Create a verification tool where a user can upload a document.
+
+Process:
+
+1. Upload PDF
+2. Calculate SHA-256
+3. Search blockchain/database for matching hash
+4. Compare hash
+5. Display result
+
+Success:
+
+"Document Verified"
+
+Failure:
+
+"Document Could Not Be Verified"
+
+Clearly explain the result.
+
+---
+
+# 15. DASHBOARD
+
+Create a professional dashboard.
+
+Top statistics:
+
+Total Documents
+Registered Documents
+Verified Documents
+Pending Documents
+
+Example:
+
+Total Documents       1,248
+Registered            1,231
+Pending                  12
+Failed                    5
+
+Add recent activity.
+
+Example:
+
+Document Registered
+Bill_of_Lading_ABC123.pdf
+2 minutes ago
+
+Document Verified
+Commercial_Invoice_9981.pdf
+15 minutes ago
+
+Add a blockchain status card:
+
+Blockchain
+Base Sepolia
+
+Network Status
+Connected
+
+Contract
+0x...
+
+---
+
+# 16. DOCUMENT TABLE
+
+Create a professional data table.
+
+Columns:
+
+* Document
+* Type
+* Organization
+* Status
+* Hash
+* Registered Date
+* Blockchain
+* Actions
+
+Features:
+
+* Search
+* Filter
+* Sort
+* Pagination
+
+Actions:
+
+* View
+* Verify
+* Copy Verification ID
+* View Blockchain Transaction
+
+---
+
+# 17. DOCUMENT DETAILS
+
+Create a detailed document page.
+
+Sections:
+
+Document Information
+
+Blockchain Proof
+
+Verification
+
+Activity
+
+Display:
+
+Filename
+Document Type
+Uploaded By
+Upload Date
+File Size
+SHA-256
+
+Blockchain:
+
+Network
+Contract
+Transaction Hash
+Block Number
+Timestamp
+Issuer Wallet
+
+Add:
+
+"View on Blockchain Explorer"
+
+button.
+
+---
+
+# 18. ACTIVITY LOG
+
+Create an activity page.
+
+Events:
+
+* Document Uploaded
+* Hash Generated
+* Blockchain Registration Started
+* Blockchain Registration Completed
+* Document Verified
+* Verification Failed
+* Wallet Connected
+
+Show timestamp and user.
+
+---
+
+# 19. SECURITY
+
+Follow good security practices.
+
+Important:
+
+* Validate uploaded files
+* Restrict file size
+* Only allow supported MIME types
+* Sanitize filenames
+* Never trust client-side hashes
+* Calculate hashes server-side
+* Never expose private keys
+* Never store wallet private keys
+* Protect API endpoints
+* Implement authorization
+* Prevent users from accessing another organization's documents
+* Validate blockchain transaction results
+* Prevent duplicate registrations
+* Do not expose sensitive document metadata publicly
+
+---
+
+# 20. DATABASE
+
+Create a proper Prisma schema.
+
+Relationships:
+
+User
+↓
+Organization
+↓
+Documents
+↓
+BlockchainRegistration
+
+Suggested models:
+
+User
+Organization
+Document
+BlockchainRegistration
+Verification
+ActivityLog
+
+Add proper indexes.
+
+Especially index:
+
+* sha256Hash
+* verificationId
+* organizationId
+* transactionHash
+
+---
+
+# 21. API
+
+Create clean API endpoints.
+
+Examples:
+
+POST /api/documents/upload
+
+POST /api/documents/:id/register
+
+GET /api/documents/:id
+
+GET /api/documents
+
+GET /api/verify/:verificationId
+
+POST /api/verify/upload
+
+GET /api/blockchain/:transactionHash
+
+Use proper HTTP status codes.
+
+Return consistent JSON responses.
+
+---
+
+# 22. ERROR HANDLING
+
+Create user-friendly errors.
+
+Examples:
+
+"File is too large."
+
+"Only PDF documents are currently supported."
+
+"Document could not be hashed."
+
+"Wallet connection failed."
+
+"Wrong blockchain network."
+
+"Transaction was rejected."
+
+"Blockchain registration failed."
+
+"Document could not be verified."
+
+Never show raw stack traces to users.
+
+---
+
+# 23. MOCK / DEVELOPMENT MODE
+
+The application should be runnable even before blockchain configuration is available.
+
+Create a development/mock blockchain mode.
+
+Example environment variable:
+
+BLOCKCHAIN_MODE=mock
+
+When mock mode is enabled:
+
+* Simulate blockchain registration
+* Generate mock transaction hashes
+* Generate mock block numbers
+* Show realistic transaction states
+
+When:
+
+BLOCKCHAIN_MODE=real
+
+use the actual Base Sepolia smart contract.
+
+This will make development much easier.
+
+---
+
+# 24. ENVIRONMENT VARIABLES
+
+Create .env.example.
+
+Include placeholders for:
+
+DATABASE_URL
+NEXTAUTH_SECRET
+BLOCKCHAIN_MODE
+BASE_SEPOLIA_RPC_URL
+CONTRACT_ADDRESS
+DEPLOYER_PRIVATE_KEY
+
+IMPORTANT:
+
+Never commit actual secrets.
+
+Never expose private keys to the browser.
+
+---
+
+# 25. SMART CONTRACT DEVELOPMENT
+
+Create:
+
+/contracts
+
+Include:
+
+ProofChainRegistry.sol
+
+Also create deployment scripts.
+
+Use Hardhat or Foundry.
+
+Choose the simpler and more maintainable option.
+
+Include:
+
+* Compile
+* Test
+* Deploy to Base Sepolia
+
+Document the commands in README.md.
+
+---
+
+# 26. TESTING
+
+Create tests for:
+
+Authentication
+
+Document upload
+
+SHA-256 hash generation
+
+Duplicate documents
+
+Organization access control
+
+Verification ID generation
+
+Blockchain registration
+
+Document verification
+
+Smart contract registration
+
+Smart contract duplicate prevention
+
+Public verification
+
+---
+
+# 27. README
+
+Create a complete README.
+
+Include:
+
+Project overview
+
+Architecture
+
+Technology stack
+
+Folder structure
+
+Installation
+
+Environment variables
+
+Database setup
+
+Development mode
+
+Mock blockchain mode
+
+Smart contract deployment
+
+Base Sepolia configuration
+
+Production considerations
+
+Testing
+
+Build instructions
+
+---
+
+# 28. PROJECT STRUCTURE
+
+Use a clean structure similar to:
+
+/app
+/components
+/lib
+/hooks
+/types
+/prisma
+/contracts
+/scripts
+/tests
+/public
+
+Organize components logically.
+
+Do not create giant files.
+
+Keep business logic separate from UI.
+
+---
+
+# 29. IMPORTANT UX RULES
+
+The user should not need to understand blockchain.
+
+Instead of:
+
+"Submit transaction to blockchain"
+
+prefer:
+
+"Create Blockchain Proof"
+
+Instead of:
+
+"Wallet provider unavailable"
+
+show:
+
+"Please connect your wallet to create a blockchain proof."
+
+Explain blockchain concepts only when necessary.
+
+---
+
+# 30. BUILD ORDER
+
+Do NOT attempt to build everything randomly.
+
+Implement in this order:
+
+PHASE 1
+Project setup
+Database
+Authentication
+Application layout
+
+PHASE 2
+Organization management
+Document upload
+SHA-256 hashing
+Document list
+
+PHASE 3
+Document details
+Verification ID
+Public verification page
+QR generation
+
+PHASE 4
+Smart contract
+Blockchain integration
+Wallet connection
+Transaction handling
+
+PHASE 5
+Dashboard
+Activity
+Search
+Filters
+Polish
+
+PHASE 6
+Testing
+Security review
+Error handling
+README
+Production cleanup
+
+---
+
+# 31. DEVELOPMENT PRINCIPLE
+
+Before implementing a feature:
+
+1. Understand the existing architecture.
+2. Check whether a component/service already exists.
+3. Reuse existing components where appropriate.
+4. Avoid duplicate logic.
+5. Keep TypeScript strongly typed.
+6. Keep the UI consistent.
+7. Do not introduce unnecessary dependencies.
+8. Do not break existing functionality.
+
+After each major phase:
+
+* Run the application
+* Run tests
+* Fix errors
+* Check TypeScript
+* Check linting
+* Verify the UI
+
+Do not simply generate code without validating it.
+
+---
+
+# 32. FINAL GOAL
+
+The final product should feel like a real SaaS product that could be shown to a logistics company, university, government organization, manufacturer, or enterprise customer.
+
+The core user journey must be extremely simple:
+
+UPLOAD DOCUMENT
+↓
+CALCULATE HASH
+↓
+CREATE BLOCKCHAIN PROOF
+↓
+GENERATE QR CODE
+↓
+ANYONE CAN VERIFY
+
+Build the MVP completely and incrementally.
+
+Start with Phase 1 now.
+
+After completing each phase, explain what was implemented, what files were created/changed, how it was tested, and what remains before proceeding to the next phase.
