@@ -1,0 +1,252 @@
+// ProofChain — Prisma schema
+//
+// Design notes:
+//  - Documents are never stored on-chain. Only the SHA-256 hash, a public
+//    verification id, the issuer address and a timestamp are anchored.
+//  - Every table that participates in a lookup path is indexed explicitly
+//    (sha256Hash, verificationId, organizationId, transactionHash).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
+enum MemberRole {
+  OWNER
+  ADMIN
+  MEMBER
+  VIEWER
+}
+
+enum DocumentStatus {
+  DRAFT
+  PENDING
+  REGISTERED
+  VERIFIED
+  FAILED
+}
+
+/// Document types are intentionally broad. `OTHER` plus the free-form
+/// `Document.documentTypeLabel` field keeps the taxonomy extensible without a
+/// migration every time a customer brings a new paperwork category.
+enum DocumentType {
+  BILL_OF_LADING
+  COMMERCIAL_INVOICE
+  PACKING_LIST
+  CERTIFICATE
+  CONTRACT
+  DELIVERY_ORDER
+  OTHER
+}
+
+enum RegistrationStatus {
+  PENDING
+  SUBMITTED
+  CONFIRMED
+  FAILED
+}
+
+/// Whether a registration was anchored against a real chain or simulated by
+/// the mock provider used in development (BLOCKCHAIN_MODE=mock).
+enum BlockchainMode {
+  MOCK
+  REAL
+}
+
+enum VerificationResult {
+  MATCH
+  MISMATCH
+  NOT_FOUND
+}
+
+enum VerificationMethod {
+  VERIFICATION_ID
+  FILE_UPLOAD
+  HASH_LOOKUP
+}
+
+enum ActivityType {
+  DOCUMENT_UPLOADED
+  HASH_GENERATED
+  BLOCKCHAIN_REGISTRATION_STARTED
+  BLOCKCHAIN_REGISTRATION_COMPLETED
+  BLOCKCHAIN_REGISTRATION_FAILED
+  DOCUMENT_VERIFIED
+  VERIFICATION_FAILED
+  WALLET_CONNECTED
+  USER_REGISTERED
+  ORGANIZATION_CREATED
+  MEMBER_INVITED
+  MEMBER_ROLE_CHANGED
+  MEMBER_REMOVED
+}
+
+// ---------------------------------------------------------------------------
+// Models
+// ---------------------------------------------------------------------------
+
+model Organization {
+  id                 String   @id @default(cuid())
+  name               String
+  registrationNumber String?
+  email              String?
+  walletAddress      String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  members       Membership[]
+  users         User[]
+  documents     Document[]
+  activityLogs  ActivityLog[]
+
+  @@index([name])
+  @@map("organizations")
+}
+
+model User {
+  id             String   @id @default(cuid())
+  name           String
+  email          String   @unique
+  passwordHash   String
+  organizationId String?
+  walletAddress  String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  /// Convenience pointer to the user's active organization. Authorization is
+  /// always decided from `Membership`, never from this column alone.
+  organization     Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  memberships      Membership[]
+  uploadedDocuments Document[]   @relation("DocumentUploader")
+  verifications    Verification[]
+  activityLogs     ActivityLog[]
+
+  @@index([organizationId])
+  @@map("users")
+}
+
+model Membership {
+  id             String     @id @default(cuid())
+  userId         String
+  organizationId String
+  role           MemberRole @default(MEMBER)
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, organizationId])
+  @@index([organizationId])
+  @@index([userId])
+  @@map("memberships")
+}
+
+model Document {
+  id                String         @id @default(cuid())
+  organizationId    String
+  uploadedBy        String
+  filename          String
+  documentType      DocumentType   @default(OTHER)
+  /// Free-form label used when `documentType` is OTHER, keeping the taxonomy
+  /// extensible without a schema migration.
+  documentTypeLabel String?
+  fileSize          Int
+  mimeType          String
+  storagePath       String
+  sha256Hash        String
+  status            DocumentStatus @default(DRAFT)
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+
+  organization  Organization            @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  uploader      User                    @relation("DocumentUploader", fields: [uploadedBy], references: [id])
+  registration  BlockchainRegistration?
+  verifications Verification[]
+  activityLogs  ActivityLog[]
+
+  /// A hash may only be registered once per organization; the smart contract
+  /// enforces global uniqueness on-chain.
+  @@unique([organizationId, sha256Hash])
+  @@index([sha256Hash])
+  @@index([organizationId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("documents")
+}
+
+model BlockchainRegistration {
+  id              String             @id @default(cuid())
+  documentId      String             @unique
+  verificationId  String             @unique
+  documentHash    String
+  status          RegistrationStatus @default(PENDING)
+  mode            BlockchainMode     @default(MOCK)
+  chainId         Int?
+  networkName     String?
+  contractAddress String?
+  transactionHash String?
+  blockNumber     BigInt?
+  issuerAddress   String?
+  registeredAt    DateTime?
+  errorMessage    String?
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+
+  document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@index([verificationId])
+  @@index([transactionHash])
+  @@index([documentHash])
+  @@map("blockchain_registrations")
+}
+
+model Verification {
+  id             String             @id @default(cuid())
+  documentId     String?
+  verificationId String?
+  submittedHash  String?
+  result         VerificationResult
+  method         VerificationMethod
+  /// Null for anonymous checks made from the public verification page.
+  verifiedBy     String?
+  ipHash         String?
+  userAgent      String?
+  createdAt      DateTime           @default(now())
+
+  document Document? @relation(fields: [documentId], references: [id], onDelete: SetNull)
+  user     User?     @relation(fields: [verifiedBy], references: [id], onDelete: SetNull)
+
+  @@index([documentId])
+  @@index([verificationId])
+  @@index([createdAt])
+  @@map("verifications")
+}
+
+model ActivityLog {
+  id             String       @id @default(cuid())
+  organizationId String?
+  userId         String?
+  documentId     String?
+  type           ActivityType
+  message        String
+  metadata       Json?
+  createdAt      DateTime     @default(now())
+
+  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User?         @relation(fields: [userId], references: [id], onDelete: SetNull)
+  document     Document?     @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, createdAt])
+  @@index([documentId])
+  @@index([type])
+  @@map("activity_logs")
+}
