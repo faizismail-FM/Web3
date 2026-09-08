@@ -5,6 +5,7 @@ import { ApiError, apiSuccess, withErrorHandling } from "@/lib/api/response";
 import { hashPassword } from "@/lib/auth/password";
 import { prisma } from "@/lib/prisma";
 import { recordActivity } from "@/lib/services/activity";
+import { acceptInvitation } from "@/lib/services/invitations";
 import { createOrganizationWithOwner } from "@/lib/services/organizations";
 import { registerSchema } from "@/lib/validation/auth";
 
@@ -26,11 +27,23 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
         },
       });
 
-      const organization = await createOrganizationWithOwner(tx, {
-        organizationName: input.organizationName,
-        userId: user.id,
-        email: input.email,
-      });
+      // An invited user joins the inviting organization; everyone else creates
+      // their own workspace and owns it.
+      const organization = input.invitationToken
+        ? await acceptInvitation(tx, {
+            token: input.invitationToken,
+            userId: user.id,
+            userEmail: user.email,
+          }).then(({ organizationId }) =>
+            tx.organization.findUniqueOrThrow({
+              where: { id: organizationId },
+            }),
+          )
+        : await createOrganizationWithOwner(tx, {
+            organizationName: input.organizationName as string,
+            userId: user.id,
+            email: input.email,
+          });
 
       await recordActivity(
         {

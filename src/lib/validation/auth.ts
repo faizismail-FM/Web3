@@ -8,16 +8,35 @@ export const passwordSchema = z
   .regex(/[A-Z]/, "Password must contain an uppercase letter")
   .regex(/[0-9]/, "Password must contain a number");
 
-export const registerSchema = z.object({
-  name: z.string().trim().min(2, "Name must be at least 2 characters").max(120),
-  email: z.string().trim().toLowerCase().email("Enter a valid email address"),
-  password: passwordSchema,
-  organizationName: z
-    .string()
-    .trim()
-    .min(2, "Organization name must be at least 2 characters")
-    .max(160),
-});
+/**
+ * Registration takes one of two shapes: creating a new workspace (which
+ * requires an organization name), or accepting an invitation (which supplies a
+ * token instead, because the organization already exists).
+ */
+export const registerSchema = z
+  .object({
+    name: z.string().trim().min(2, "Name must be at least 2 characters").max(120),
+    email: z.string().trim().toLowerCase().email("Enter a valid email address"),
+    password: passwordSchema,
+    organizationName: z
+      .string()
+      .trim()
+      .max(160)
+      .optional()
+      .or(z.literal("")),
+    invitationToken: z.string().trim().min(1).optional().or(z.literal("")),
+  })
+  .superRefine((value, ctx) => {
+    if (value.invitationToken) return;
+
+    if (!value.organizationName || value.organizationName.length < 2) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["organizationName"],
+        message: "Organization name must be at least 2 characters",
+      });
+    }
+  });
 
 export const loginSchema = z.object({
   email: z.string().trim().toLowerCase().email("Enter a valid email address"),

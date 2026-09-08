@@ -2,7 +2,7 @@
 
 import { Loader2 } from "lucide-react";
 import { signIn } from "next-auth/react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useState, type FormEvent } from "react";
 
 import { Field } from "@/components/auth/field";
@@ -12,8 +12,14 @@ import { Input } from "@/components/ui/input";
 import { apiFetch } from "@/lib/api/client";
 import { registerSchema } from "@/lib/validation/auth";
 
-export function RegisterForm() {
+export function RegisterForm({
+  invitedOrganization,
+}: {
+  invitedOrganization: string | null;
+}) {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const invitationToken = searchParams.get("invite") ?? "";
   const [pending, setPending] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
@@ -28,7 +34,8 @@ export function RegisterForm() {
       name: formData.get("name"),
       email: formData.get("email"),
       password: formData.get("password"),
-      organizationName: formData.get("organizationName"),
+      organizationName: formData.get("organizationName") ?? "",
+      invitationToken,
     };
 
     const parsed = registerSchema.safeParse(values);
@@ -100,21 +107,23 @@ export function RegisterForm() {
         />
       </Field>
 
-      <Field
-        id="organizationName"
-        label="Organization"
-        error={fieldErrors.organizationName}
-        hint="You can invite colleagues once your workspace is created."
-      >
-        <Input
+      {invitationToken ? null : (
+        <Field
           id="organizationName"
-          name="organizationName"
-          autoComplete="organization"
-          placeholder="FM Global Logistics"
-          required
-          aria-invalid={Boolean(fieldErrors.organizationName)}
-        />
-      </Field>
+          label="Organization"
+          error={fieldErrors.organizationName}
+          hint="You can invite colleagues once your workspace is created."
+        >
+          <Input
+            id="organizationName"
+            name="organizationName"
+            autoComplete="organization"
+            placeholder="FM Global Logistics"
+            required
+            aria-invalid={Boolean(fieldErrors.organizationName)}
+          />
+        </Field>
+      )}
 
       <Field
         id="password"
@@ -136,8 +145,10 @@ export function RegisterForm() {
         {pending ? (
           <>
             <Loader2 className="size-4 animate-spin" aria-hidden="true" />
-            Creating your workspace
+            {invitedOrganization ? "Joining" : "Creating your workspace"}
           </>
+        ) : invitedOrganization ? (
+          "Join organization"
         ) : (
           "Create account"
         )}

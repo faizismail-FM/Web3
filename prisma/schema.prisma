@@ -106,6 +106,7 @@ model Organization {
   users         User[]
   documents     Document[]
   activityLogs  ActivityLog[]
+  invitations   Invitation[]
 
   @@index([name])
   @@map("organizations")
@@ -128,6 +129,7 @@ model User {
   uploadedDocuments Document[]   @relation("DocumentUploader")
   verifications    Verification[]
   activityLogs     ActivityLog[]
+  sentInvitations   Invitation[] @relation("InvitationSender")
 
   @@index([organizationId])
   @@map("users")
@@ -148,6 +150,31 @@ model Membership {
   @@index([organizationId])
   @@index([userId])
   @@map("memberships")
+}
+
+/// An invitation to join an organization.
+///
+/// Only a hash of the invite token is stored, so a database leak does not yield
+/// working invitation links — the same reasoning as password storage.
+model Invitation {
+  id             String     @id @default(cuid())
+  organizationId String
+  /// Optional. When set, only this address may accept the invitation.
+  email          String?
+  role           MemberRole @default(MEMBER)
+  tokenHash      String     @unique
+  invitedBy      String
+  expiresAt      DateTime
+  acceptedAt     DateTime?
+  revokedAt      DateTime?
+  createdAt      DateTime   @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  inviter      User         @relation("InvitationSender", fields: [invitedBy], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([expiresAt])
+  @@map("invitations")
 }
 
 model Document {

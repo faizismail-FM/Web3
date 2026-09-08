@@ -14,12 +14,12 @@ wallet, or any knowledge of blockchain technology.
 
 ## Status
 
-This project is being built in phases. **Phase 1 is complete.**
+This project is being built in phases. **Phases 1–2 are complete.**
 
 | Phase | Scope | Status |
 | ----- | ----- | ------ |
 | 1 | Project setup, database, authentication, application layout | ✅ Complete |
-| 2 | Organization management, document upload, SHA-256 hashing, document list | ⬜ Not started |
+| 2 | Organization management, document upload, SHA-256 hashing, document list | ✅ Complete |
 | 3 | Document details, verification ID, public verification page, QR generation | ⬜ Not started |
 | 4 | Smart contract, blockchain integration, wallet connection, transactions | ⬜ Not started |
 | 5 | Dashboard, activity, search, filters, polish | ⬜ Not started |
@@ -87,8 +87,9 @@ src/
     providers/       Theme and session providers
   lib/
     auth/            Sessions, password hashing, role-based access control
-    api/             Response envelope and typed fetch client
-    services/        Business logic
+    api/             Response envelope, typed fetch client, org-scoped guard
+    documents/       Document taxonomy and upload validation rules
+    services/        Business logic (documents, storage, hashing, invitations)
     validation/      Zod schemas shared by client and server
 prisma/              Schema, migrations, seed script
 tests/
@@ -174,6 +175,20 @@ npm run build        # production build
 npm start            # serve the production build
 ```
 
+### Uploading documents
+
+Documents are stored under `STORAGE_DIR` (default `./storage`), partitioned by
+organization and named by UUID. The directory is git-ignored and is not served
+publicly — there is no URL that maps to a stored file.
+
+Only PDFs up to `MAX_UPLOAD_BYTES` (default 10 MB) are accepted.
+
+### Inviting colleagues
+
+There is no email delivery yet. Creating an invitation returns a single-use
+link, shown **once** to the inviter to pass on themselves. The token is stored
+only as a hash, so a lost link genuinely cannot be recovered — issue a new one.
+
 ### Mock blockchain mode
 
 The application runs end to end with **no blockchain configuration at all**.
@@ -205,9 +220,16 @@ createdb proofchain_test
 DATABASE_URL="postgresql://.../proofchain_test" npx prisma migrate deploy
 ```
 
+The test database is migrated automatically before each run by the `pretest`
+script, so a new migration never shows up as a confusing "table does not exist"
+failure.
+
 Current coverage: password hashing, role-based access control, input
 validation, display formatting, transactional account and organization
-creation, and cross-organization data isolation.
+creation, cross-organization data isolation, SHA-256 hashing, upload validation
+(size, MIME type, magic bytes, filename sanitisation), duplicate detection,
+document listing with pagination, sorting and filtering, member role changes and
+removal, and the full invitation lifecycle.
 
 ---
 
@@ -229,9 +251,33 @@ Implemented in Phase 1:
   expressed as capabilities rather than scattered role comparisons.
 - `.env` is git-ignored; only `.env.example` is committed.
 
-Planned for later phases: upload validation (size, MIME type, filename
-sanitisation), server-side hashing, duplicate-registration prevention, and
-on-chain transaction result validation.
+Added in Phase 2:
+
+- **Hashes are computed server-side, always.** `src/lib/services/hashing.ts` is
+  the only place a document fingerprint is produced. A client-supplied hash is
+  ignored entirely — accepting one would prove nothing about the stored bytes.
+- **Uploads are validated three ways**: declared MIME type, file extension, and
+  the file's own magic bytes. A non-PDF renamed to `.pdf` and sent with a PDF
+  content type is still rejected.
+- **Filenames are sanitised** against directory traversal, control characters
+  and reserved characters. The uploaded name is never used as a path in any
+  case: stored files are named by UUID and partitioned by organization.
+- **Storage paths are resolved against the storage root** and anything escaping
+  it is refused, so a future bug becomes a failure rather than an arbitrary
+  file read.
+- **`requireOrgMember()` is the single authorization entry point** for
+  organization-scoped routes. It re-reads membership from the database rather
+  than trusting the session token, so a role change or removal takes effect
+  immediately.
+- **Duplicate documents are rejected** per organization, backed by a unique
+  index rather than only a pre-check, so concurrent uploads cannot both win.
+- **Invitation tokens are stored only as a hash**, are single-use, expire after
+  seven days, and may be bound to a specific email address.
+- **Owners cannot be demoted or removed** through the API, and nobody can change
+  their own role — so an organization always keeps an owner.
+
+Planned for later phases: on-chain transaction result validation and
+duplicate-registration prevention at the contract level.
 
 ---
 
