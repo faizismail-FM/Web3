@@ -1,30 +1,38 @@
-import { ShieldCheck } from "lucide-react";
 import type { Metadata } from "next";
 
-import { EmptyState } from "@/components/common/empty-state";
+import { VerifyUploadForm } from "@/components/verification/verify-upload-form";
+import { getServerEnv } from "@/lib/env";
+import { normalizeVerificationId } from "@/lib/verification/id";
 
 export const metadata: Metadata = {
   title: "Verify a document",
 };
 
-export default function VerifyPage() {
+export default async function VerifyPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ id?: string }>;
+}) {
+  const { id } = await searchParams;
+  const prefilled = id ? (normalizeVerificationId(id) ?? "") : "";
+
   return (
-    <div className="mx-auto w-full max-w-3xl px-4 py-16 sm:px-6">
+    <div className="mx-auto w-full max-w-2xl px-4 py-12 sm:px-6 sm:py-16">
       <div className="space-y-2">
         <h1 className="text-3xl font-semibold tracking-tight">
           Verify a document
         </h1>
         <p className="text-muted-foreground">
-          Check whether a document matches a registered proof. You do not need
-          an account.
+          Upload a document to check whether it matches a registered proof. You
+          do not need an account, a wallet, or any knowledge of blockchain
+          technology.
         </p>
       </div>
 
       <div className="mt-10">
-        <EmptyState
-          icon={ShieldCheck}
-          title="Verification is coming next"
-          description="Upload-based verification and verification-ID lookup are built in a later phase of this project."
+        <VerifyUploadForm
+          maxBytes={getServerEnv().MAX_UPLOAD_BYTES}
+          defaultVerificationId={prefilled}
         />
       </div>
     </div>

@@ -200,3 +200,50 @@ export async function listDocuments(
 export type DocumentListItem = Awaited<
   ReturnType<typeof listDocuments>
 >["documents"][number];
+
+/**
+ * Loads a single document, scoped to the caller's organization.
+ *
+ * The organization is part of the `where` clause rather than checked after
+ * loading, so a document id belonging to another tenant simply does not exist
+ * as far as this query is concerned.
+ */
+export async function getDocumentForOrganization(
+  documentId: string,
+  organizationId: string,
+) {
+  return prisma.document.findFirst({
+    where: { id: documentId, organizationId },
+    include: {
+      uploader: { select: { id: true, name: true, email: true } },
+      organization: { select: { id: true, name: true, walletAddress: true } },
+      registration: true,
+      verifications: {
+        orderBy: { createdAt: "desc" },
+        take: 10,
+        select: {
+          id: true,
+          result: true,
+          method: true,
+          createdAt: true,
+          user: { select: { name: true } },
+        },
+      },
+      activityLogs: {
+        orderBy: { createdAt: "desc" },
+        take: 25,
+        select: {
+          id: true,
+          type: true,
+          message: true,
+          createdAt: true,
+          user: { select: { name: true } },
+        },
+      },
+    },
+  });
+}
+
+export type DocumentDetail = NonNullable<
+  Awaited<ReturnType<typeof getDocumentForOrganization>>
+>;

@@ -14,13 +14,13 @@ wallet, or any knowledge of blockchain technology.
 
 ## Status
 
-This project is being built in phases. **Phases 1–2 are complete.**
+This project is being built in phases. **Phases 1–3 are complete.**
 
 | Phase | Scope | Status |
 | ----- | ----- | ------ |
 | 1 | Project setup, database, authentication, application layout | ✅ Complete |
 | 2 | Organization management, document upload, SHA-256 hashing, document list | ✅ Complete |
-| 3 | Document details, verification ID, public verification page, QR generation | ⬜ Not started |
+| 3 | Document details, verification ID, public verification page, QR generation | ✅ Complete |
 | 4 | Smart contract, blockchain integration, wallet connection, transactions | ⬜ Not started |
 | 5 | Dashboard, activity, search, filters, polish | ⬜ Not started |
 | 6 | Testing, security review, error handling, production cleanup | ⬜ Not started |
@@ -74,7 +74,7 @@ do not decide.
 ```
 src/
   app/
-    (public)/        Landing page and public verification (no account needed)
+    (public)/        Landing page, /verify and /verify/[id] (no account needed)
     (auth)/          Login and registration
     (app)/           Authenticated application shell
     api/             JSON API routes
@@ -88,9 +88,11 @@ src/
   lib/
     auth/            Sessions, password hashing, role-based access control
     api/             Response envelope, typed fetch client, org-scoped guard
+    blockchain/      Network config and the anchoring provider (mock today)
     documents/       Document taxonomy and upload validation rules
-    services/        Business logic (documents, storage, hashing, invitations)
+    services/        Business logic (documents, storage, hashing, proofs, verification)
     validation/      Zod schemas shared by client and server
+    verification/    Verification IDs, public URLs, QR codes
 prisma/              Schema, migrations, seed script
 tests/
   unit/              Pure logic
@@ -183,6 +185,31 @@ publicly — there is no URL that maps to a stored file.
 
 Only PDFs up to `MAX_UPLOAD_BYTES` (default 10 MB) are accepted.
 
+### Verification IDs and QR codes
+
+Registering a proof mints a human-readable verification ID such as `PC-8F29A2`.
+The alphabet excludes `0/O` and `1/I/L`, because these IDs are read aloud and
+typed off printed paper. IDs are drawn with `crypto.randomInt`, not
+`Math.random` — a guessable ID would let someone enumerate other organizations'
+proofs.
+
+Every proof gets a public URL (`/verify/PC-8F29A2`) and a QR code, available as
+SVG for display and PNG for printing. QR images are generated only for IDs that
+actually exist, so the endpoint cannot be used to mint official-looking codes
+for arbitrary text.
+
+### Verifying a document
+
+Two ways, neither requiring an account:
+
+- **By ID** — open the verification URL or scan the QR code.
+- **By upload** — drop the document at `/verify`. It is fingerprinted in memory
+  and discarded; verification uploads are never stored.
+
+Supplying a verification ID alongside an upload changes what a failure means: a
+mismatch says *this is a different document*, where a bare lookup can only say
+*no such document is registered*.
+
 ### Inviting colleagues
 
 There is no email delivery yet. Creating an invitation returns a single-use
@@ -198,8 +225,14 @@ states are shown, so the product can be developed and demonstrated before a
 contract is deployed. The header shows a **Simulation mode** badge whenever mock
 mode is active, so a simulated proof is never mistaken for a real one.
 
-Set `BLOCKCHAIN_MODE=real` to anchor proofs on the deployed Base Sepolia
-contract. *(Implemented in Phase 4.)*
+Creating a proof mints a verification ID, records a simulated transaction hash
+and block number, and produces a working public verification page and QR code —
+the full user journey, minus a real chain.
+
+`BLOCKCHAIN_MODE=real` currently **fails with a clear error** rather than
+silently simulating. Real anchoring arrives with the `ProofChainRegistry`
+contract in Phase 4. An operator who asked for real proofs must never
+unknowingly get mock ones.
 
 ---
 
@@ -229,7 +262,9 @@ validation, display formatting, transactional account and organization
 creation, cross-organization data isolation, SHA-256 hashing, upload validation
 (size, MIME type, magic bytes, filename sanitisation), duplicate detection,
 document listing with pagination, sorting and filtering, member role changes and
-removal, and the full invitation lifecycle.
+removal, the full invitation lifecycle, verification ID generation and
+normalisation, proof registration, public proof lookup, tamper detection, and
+verification audit records.
 
 ---
 
@@ -275,6 +310,28 @@ Added in Phase 2:
   seven days, and may be bound to a specific email address.
 - **Owners cannot be demoted or removed** through the API, and nobody can change
   their own role — so an organization always keeps an owner.
+
+Added in Phase 3:
+
+- **The public proof view is a deliberate allowlist.** Filename, uploader, file
+  size and storage path are never exposed — `Termination_Letter_J_Smith.pdf`
+  would leak the very thing the document is about. A test asserts these do not
+  appear in the public payload.
+- **A document belonging to another organization returns 404**, not 403, from
+  every document route including detail, download and proof creation — the
+  organization is part of the query, so it does not exist as far as the lookup
+  is concerned.
+- **Stored files leave the server through one authorized route only**, served
+  as `attachment` with `no-store`. There is no public path to the storage
+  directory.
+- **Verification IDs are cryptographically random**, so proofs cannot be
+  enumerated.
+- **An unconfirmed registration reports as pending, never as verified.**
+  Overstating a proof is the one lie this product cannot afford.
+- **Simulated proofs are labelled as such** on the document page and on the
+  public verification page, so a mock proof can never be mistaken for a real
+  one. `BLOCKCHAIN_MODE=real` currently fails loudly rather than silently
+  falling back to simulation.
 
 Planned for later phases: on-chain transaction result validation and
 duplicate-registration prevention at the contract level.

@@ -1,6 +1,9 @@
+import Link from "next/link";
+
 import { CopyButton } from "@/components/common/copy-button";
 import { HashDisplay } from "@/components/documents/hash-display";
 import { DocumentStatusBadge } from "@/components/documents/status-badge";
+import { Button } from "@/components/ui/button";
 import {
   Table,
   TableBody,
@@ -60,9 +63,13 @@ export function DocumentsTable({
           {documents.map((document) => (
             <TableRow key={document.id}>
               <TableCell className="max-w-64">
-                <p className="truncate font-medium" title={document.filename}>
+                <Link
+                  href={`/documents/${document.id}`}
+                  className="block truncate font-medium underline-offset-4 hover:underline"
+                  title={document.filename}
+                >
                   {document.filename}
-                </p>
+                </Link>
                 <p className="tabular text-xs text-muted-foreground">
                   {formatFileSize(document.fileSize)}
                 </p>
@@ -98,20 +105,19 @@ export function DocumentsTable({
               </TableCell>
 
               <TableCell className="text-right">
-                {document.registration?.verificationId ? (
-                  <CopyButton
-                    value={document.registration.verificationId}
-                    label="Copy ID"
-                    copiedLabel="Copied"
-                    variant="ghost"
-                  />
-                ) : (
-                  // Creating a proof happens from the document detail page,
-                  // which arrives in a later phase.
-                  <span className="text-xs text-muted-foreground">
-                    Awaiting proof
-                  </span>
-                )}
+                <div className="flex items-center justify-end gap-1">
+                  {document.registration?.verificationId ? (
+                    <CopyButton
+                      value={document.registration.verificationId}
+                      label="Copy ID"
+                      copiedLabel="Copied"
+                      variant="ghost"
+                    />
+                  ) : null}
+                  <Button asChild variant="ghost" size="sm">
+                    <Link href={`/documents/${document.id}`}>View</Link>
+                  </Button>
+                </div>
               </TableCell>
             </TableRow>
           ))}
