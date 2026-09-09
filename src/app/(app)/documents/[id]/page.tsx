@@ -7,7 +7,7 @@ import { notFound } from "next/navigation";
 import { ActivityTimeline } from "@/components/documents/activity-timeline";
 import { HashDisplay } from "@/components/documents/hash-display";
 import { QrPanel } from "@/components/documents/qr-panel";
-import { RegisterProofButton } from "@/components/documents/register-proof-button";
+import { ProofActions } from "@/components/documents/proof-actions";
 import { DocumentStatusBadge } from "@/components/documents/status-badge";
 import { PageHeader } from "@/components/layout/page-header";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -216,12 +216,19 @@ export default async function DocumentDetailPage({
                 className="border-destructive/30 bg-destructive-muted text-destructive-muted-foreground"
               >
                 <AlertDescription>
-                  The blockchain proof could not be created. Your document and
-                  its fingerprint are unaffected — you can try again.
+                  {registration.errorMessage ??
+                    "The blockchain proof could not be created."}{" "}
+                  Your document and its fingerprint are unaffected — you can try
+                  again.
                 </AlertDescription>
               </Alert>
               {can.registerOnChain(user.role) ? (
-                <RegisterProofButton documentId={document.id} retry />
+                <ProofActions
+                  documentId={document.id}
+                  filename={document.filename}
+                  sha256Hash={document.sha256Hash}
+                  retry
+                />
               ) : null}
             </div>
           ) : registration?.status === RegistrationStatus.PENDING ? (
@@ -236,7 +243,11 @@ export default async function DocumentDetailPage({
                 and has not changed since.
               </p>
               {can.registerOnChain(user.role) ? (
-                <RegisterProofButton documentId={document.id} />
+                <ProofActions
+                  documentId={document.id}
+                  filename={document.filename}
+                  sha256Hash={document.sha256Hash}
+                />
               ) : (
                 <p className="text-sm text-muted-foreground">
                   Viewers cannot create proofs. Ask an administrator.

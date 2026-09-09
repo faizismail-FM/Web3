@@ -12,6 +12,9 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // The Solidity toolchain is a separate package with its own tooling, and
+    // its build output is generated rather than authored.
+    "contracts/**",
   ]),
 ]);
 

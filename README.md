@@ -14,7 +14,7 @@ wallet, or any knowledge of blockchain technology.
 
 ## Status
 
-This project is being built in phases. **Phases 1–3 are complete.**
+This project is being built in phases. **Phases 1–4 are complete.**
 
 | Phase | Scope | Status |
 | ----- | ----- | ------ |
@@ -65,7 +65,8 @@ do not decide.
 - **PostgreSQL** with **Prisma ORM**
 - **NextAuth** (credentials provider, JWT sessions, bcrypt password hashing)
 - **Vitest** for unit and integration tests
-- *Planned:* Solidity + OpenZeppelin, viem/wagmi, Base Sepolia
+- **Solidity 0.8.28** + **OpenZeppelin 5**, compiled and tested with **Hardhat 3**
+- **viem** and **wagmi** for wallet connection and chain reads, on **Base Sepolia**
 
 ---
 
@@ -94,10 +95,27 @@ src/
     validation/      Zod schemas shared by client and server
     verification/    Verification IDs, public URLs, QR codes
 prisma/              Schema, migrations, seed script
+contracts/           Self-contained Hardhat package (see below)
+  src/               ProofChainRegistry.sol
+  test/              Contract tests
+  scripts/           Deployment and ABI export
 tests/
   unit/              Pure logic
-  integration/       Database-backed
+  integration/       Database-backed, plus an opt-in live-chain suite
 ```
+
+### Why contracts are a separate package
+
+`contracts/` has its own `package.json` and `node_modules`. Hardhat 3 requires an
+ESM project, and converting the whole application to ESM purely to satisfy the
+Solidity toolchain would be the tail wagging the dog. Keeping it separate also
+means the web application's dependency tree contains no Hardhat at all, so
+`npm audit` for what actually ships stays clean.
+
+The application never imports from `contracts/`. The one thing that crosses the
+boundary is the ABI, which is **generated** into `src/lib/blockchain/abi.ts` and
+committed — so the app builds without the Solidity toolchain, and the ABI it
+encodes against cannot drift from the deployed contract.
 
 ---
 
@@ -185,6 +203,66 @@ publicly — there is no URL that maps to a stored file.
 
 Only PDFs up to `MAX_UPLOAD_BYTES` (default 10 MB) are accepted.
 
+### Smart contract
+
+`ProofChainRegistry` records, per proof: the document fingerprint, the issuer,
+a timestamp and the verification id. It emits `DocumentRegistered` and exposes
+read-only lookups by fingerprint and by verification id. It uses OpenZeppelin's
+`Ownable` and `Pausable`.
+
+**Duplicate policy.** Uniqueness is enforced per *(document, issuer)*, not
+globally per document. Two counterparties to the same shipment legitimately hold
+the same bill of lading and both must be able to attest to it; global uniqueness
+would make the first registrant the only party who could ever prove they had the
+document. What is prevented is the same issuer registering the same document
+twice. Verification ids remain globally unique. This matches the application's
+own per-organization duplicate rule.
+
+**Ownership grants exactly one power:** pausing new registrations. There is no
+function that can alter or delete a proof that has already been recorded — a
+test asserts the full list of state-changing functions, so adding one is a
+deliberate act.
+
+```bash
+npm run contracts:install    # once
+npm run contracts:compile
+npm run contracts:test
+npm run contracts:abi        # regenerate src/lib/blockchain/abi.ts
+npm run contracts:deploy     # deploy to Base Sepolia
+```
+
+### Base Sepolia configuration
+
+1. Fund a deployer account from a Base Sepolia faucet.
+2. Set `DEPLOYER_PRIVATE_KEY` and `BASE_SEPOLIA_RPC_URL` in `.env`.
+3. Run `npm run contracts:deploy`. It prints the values to copy back into
+   `.env` (`CONTRACT_ADDRESS`, `NEXT_PUBLIC_CONTRACT_ADDRESS`,
+   `BLOCKCHAIN_MODE=real`).
+4. Rebuild the application so the public variables are inlined.
+
+`DEPLOYER_PRIVATE_KEY` is read by the deployment script and nowhere else. The
+web server holds no key and cannot sign anything.
+
+### How a real proof is created
+
+Proofs are signed by the issuing organization's **own wallet**, never by the
+server:
+
+1. The browser asks the server to prepare. The server reserves a verification
+   id, records a PENDING registration, and returns the fingerprint, contract
+   address and chain id.
+2. The user approves the transaction in their wallet.
+3. The browser waits for the transaction to be mined, then sends **only the
+   transaction hash** back.
+4. The server independently fetches the receipt from the chain and checks: the
+   transaction succeeded, it was sent to the registry contract, and a
+   `DocumentRegistered` log emitted *by that contract* carries exactly the
+   fingerprint and verification id that were reserved. The issuer, block number
+   and timestamp are read from the chain, never from the request.
+
+Only then is the proof recorded. A client that submits an unrelated, failed, or
+fabricated transaction gets a rejection.
+
 ### Verification IDs and QR codes
 
 Registering a proof mints a human-readable verification ID such as `PC-8F29A2`.
@@ -227,12 +305,12 @@ mode is active, so a simulated proof is never mistaken for a real one.
 
 Creating a proof mints a verification ID, records a simulated transaction hash
 and block number, and produces a working public verification page and QR code —
-the full user journey, minus a real chain.
+the full user journey with no wallet, no RPC endpoint and no deployed contract.
 
-`BLOCKCHAIN_MODE=real` currently **fails with a clear error** rather than
-silently simulating. Real anchoring arrives with the `ProofChainRegistry`
-contract in Phase 4. An operator who asked for real proofs must never
-unknowingly get mock ones.
+Simulated proofs are stored with `mode: MOCK` and labelled as simulated on both
+the document page and the public verification page, so a mock proof can never be
+mistaken for a real one. In `real` mode, the server-side anchoring path refuses
+to run at all — proofs must be wallet-signed.
 
 ---
 
@@ -264,7 +342,27 @@ creation, cross-organization data isolation, SHA-256 hashing, upload validation
 document listing with pagination, sorting and filtering, member role changes and
 removal, the full invitation lifecycle, verification ID generation and
 normalisation, proof registration, public proof lookup, tamper detection, and
-verification audit records.
+verification audit records, the ABI's shape, and the on-chain confirmation
+guard (reverted transactions, wrong contract, wrong document, wrong verification
+id, forged logs from another address).
+
+Contract tests run separately:
+
+```bash
+npm run contracts:test    # 18 tests
+npm run test:all          # application + contract tests
+```
+
+An opt-in suite exercises the real confirmation path against an actual EVM.
+Start a node and point the tests at it:
+
+```bash
+cd contracts && npx hardhat node          # in one terminal
+LOCAL_CHAIN_RPC=http://127.0.0.1:8545 npm test
+```
+
+Without `LOCAL_CHAIN_RPC` those cases are skipped, so the default run stays
+self-contained.
 
 ---
 
@@ -333,8 +431,21 @@ Added in Phase 3:
   one. `BLOCKCHAIN_MODE=real` currently fails loudly rather than silently
   falling back to simulation.
 
-Planned for later phases: on-chain transaction result validation and
-duplicate-registration prevention at the contract level.
+Added in Phase 4:
+
+- **The server holds no private key.** It cannot sign a transaction on any
+  user's behalf. Real proofs are signed by the organization's own wallet.
+- **Transaction results are verified against the chain, not trusted.** The
+  browser supplies only a transaction hash; the receipt is re-fetched and the
+  emitted event must match the reserved fingerprint and verification id. Logs
+  from any address other than the registry are ignored, so a look-alike contract
+  emitting the same event cannot mint a proof.
+- **Duplicate registration is prevented on-chain** per (document, issuer), and
+  verification ids are globally unique at the contract level.
+- **The contract cannot rewrite history.** Pausing blocks new registrations
+  only; existing proofs stay readable and verifiable.
+- **The Solidity toolchain is not in the application's dependency tree**, so it
+  cannot reach production.
 
 ---
 
@@ -346,3 +457,10 @@ duplicate-registration prevention at the contract level.
 - Replace filesystem storage with object storage before scaling beyond a single
   instance. Storage access is already isolated behind `STORAGE_DIR`.
 - Serve over HTTPS so session cookies are sent with the `Secure` attribute.
+- Deploy the contract and set `BLOCKCHAIN_MODE=real` before onboarding real
+  customers; simulated proofs are clearly labelled but are not evidence.
+- `npm audit` reports 3 moderate advisories in the **contracts** package only
+  (an unfixed symlink issue in `adm-zip`, reached when Hardhat extracts a
+  compiler download from the official Solidity release server). It is a
+  development dependency of a package the application never imports, and is
+  absent from the production build. The web application itself audits clean.

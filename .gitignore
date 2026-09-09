@@ -47,3 +47,9 @@ next-env.d.ts
 
 # generated prisma client
 /src/generated
+
+# hardhat build output (generated; the ABI the app uses is exported to src/)
+/contracts/artifacts
+/contracts/cache
+/contracts/node_modules
+/contracts/types
