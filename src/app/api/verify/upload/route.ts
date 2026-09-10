@@ -1,7 +1,13 @@
 import { VerificationMethod } from "@prisma/client";
 import type { NextRequest } from "next/server";
 
-import { ApiError, apiSuccess, withErrorHandling } from "@/lib/api/response";
+import { clientKey } from "@/lib/api/rate-limit";
+import {
+  ApiError,
+  apiSuccess,
+  enforceRateLimit,
+  withErrorHandling,
+} from "@/lib/api/response";
 import { getCurrentUser } from "@/lib/auth/session";
 import { assertAllowedUpload, sanitizeFilename } from "@/lib/documents/upload-rules";
 import { getServerEnv } from "@/lib/env";
@@ -18,6 +24,11 @@ export const runtime = "nodejs";
  * counterparty's confidential paperwork here.
  */
 export const POST = withErrorHandling(async (request: NextRequest) => {
+  enforceRateLimit(`verify-upload:${clientKey(request)}`, {
+    limit: 30,
+    windowMs: 10 * 60 * 1000,
+  });
+
   const env = getServerEnv();
 
   const formData = await request.formData().catch(() => {

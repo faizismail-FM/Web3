@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { ZodError } from "zod";
 
+import { rateLimit } from "@/lib/api/rate-limit";
+
 /**
  * Every API route returns the same envelope so clients never have to guess at
  * the shape of a failure:
@@ -44,10 +46,34 @@ export class ApiError extends Error {
     readonly code: ApiErrorCode,
     message: string,
     readonly fields?: Record<string, string>,
+    /** Extra response headers, e.g. `Retry-After` on a rate limit. */
+    readonly headers?: Record<string, string>,
   ) {
     super(message);
     this.name = "ApiError";
   }
+}
+
+/**
+ * Applies a rate limit, throwing a 429 with `Retry-After` when exceeded.
+ *
+ * Used on endpoints that are unauthenticated, expensive, or both — where an
+ * unbounded caller could burn CPU (bcrypt, hashing a 10 MB upload) or create
+ * accounts in a loop.
+ */
+export function enforceRateLimit(
+  key: string,
+  options: { limit: number; windowMs: number },
+): void {
+  const result = rateLimit(key, options);
+  if (result.allowed) return;
+
+  throw new ApiError(
+    "RATE_LIMITED",
+    "Too many requests. Please wait a moment and try again.",
+    undefined,
+    { "Retry-After": String(result.retryAfterSeconds) },
+  );
 }
 
 export function apiSuccess<T>(data: T, status = 200) {
@@ -58,10 +84,11 @@ export function apiFailure(
   code: ApiErrorCode,
   message: string,
   fields?: Record<string, string>,
+  headers?: HeadersInit,
 ) {
   return NextResponse.json<ApiErrorBody>(
     { error: { code, message, ...(fields ? { fields } : {}) } },
-    { status: STATUS_BY_CODE[code] },
+    { status: STATUS_BY_CODE[code], headers },
   );
 }
 
@@ -87,7 +114,12 @@ export function withErrorHandling<Args extends unknown[]>(
       return await handler(...args);
     } catch (error) {
       if (error instanceof ApiError) {
-        return apiFailure(error.code, error.message, error.fields);
+        return apiFailure(
+          error.code,
+          error.message,
+          error.fields,
+          error.headers,
+        );
       }
       if (error instanceof ZodError) {
         return apiFailure(

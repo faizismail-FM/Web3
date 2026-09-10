@@ -14,7 +14,8 @@ wallet, or any knowledge of blockchain technology.
 
 ## Status
 
-This project is being built in phases. **Phases 1–5 are complete.**
+**All six phases are complete.** The MVP implements every section of the
+specification.
 
 | Phase | Scope | Status |
 | ----- | ----- | ------ |
@@ -25,8 +26,8 @@ This project is being built in phases. **Phases 1–5 are complete.**
 | 5 | Dashboard, activity, search, filters, polish | ✅ Complete |
 | 6 | Testing, security review, error handling, production cleanup | ⬜ Not started |
 
-Every page in the specification is now implemented. Phase 6 covers the final
-security review, error-handling sweep and production cleanup.
+Run `npm run preflight` before deploying — it catches the misconfigurations
+that are silent but serious.
 
 ---
 
@@ -190,10 +191,16 @@ password `ProofChain123`. **Development only.**
 npm run dev          # http://localhost:3000
 npm run typecheck    # tsc --noEmit
 npm run lint         # eslint
-npm test             # vitest
+npm test             # vitest (application)
+npm run test:all     # application + contract tests
 npm run build        # production build
 npm start            # serve the production build
+npm run preflight    # check configuration before deploying
 ```
+
+`GET /api/health` reports liveness and database reachability for a load
+balancer. It returns only `status` and `database` — never versions or
+configuration.
 
 ### Uploading documents
 
@@ -479,7 +486,59 @@ Added in Phase 5:
   it is reachable. "Connected" means the chain answered; a misconfigured or
   unreachable node shows as a problem rather than a blank card.
 
+Added in Phase 6:
+
+- **Rate limiting** on the endpoints that are unauthenticated, expensive, or
+  both: registration (5/hour per caller), verification by upload (30/10min,
+  since each call hashes up to 10 MB), verification lookup (120/10min), and
+  sign-in (10 per account and 30 per caller, per 15 minutes). A throttled
+  sign-in returns the same response as a wrong password, so an attacker still
+  learns nothing about which accounts exist.
+- **Security headers on every response**, including a Content-Security-Policy
+  and `frame-ancestors 'none'` — a verification page must not be framed inside
+  a site that then claims the result as its own. `X-Powered-By` is off.
+- **Stored failure messages are vetted text only.** A registration failure is
+  shown on the document page, so the raw error is logged and replaced. A test
+  asserts a connection string in an error never reaches the database or the
+  activity log.
+- **Two dead columns removed** (`ipHash`, `userAgent`). They collected nothing
+  but implied the public verification endpoint tracked its visitors. Logging who
+  checked whose paperwork is a liability the product does not need.
+
+### Known limitations
+
+Stated plainly rather than left to be discovered:
+
+- **Rate limiting is per instance.** It uses process memory, so behind more than
+  one server each gets its own budget. Move it to Redis before scaling
+  horizontally.
+- **Document storage is a local filesystem.** Fine for a single instance;
+  replace with object storage before scaling out. Access is already isolated
+  behind `STORAGE_DIR`.
+- **Invitations have no email delivery.** The link is shown once to the inviter
+  to pass on themselves.
+- **The wallet approval step is not covered by automated tests**, because it
+  needs a real wallet extension. Everything either side of it is tested,
+  including against a live EVM.
+- **`npm audit` reports 3 moderate advisories in the contracts package**, from
+  an unfixed issue in a Hardhat dependency. Development-only, absent from the
+  production build. The web application audits clean.
+
 ---
+
+## Production checklist
+
+```bash
+npm run preflight
+```
+
+It fails the build on: a placeholder or short `NEXTAUTH_SECRET`; a localhost or
+non-https `NEXT_PUBLIC_APP_URL` (those URLs are printed onto documents and
+encoded into QR codes, so a localhost value produces codes nobody can scan);
+and `BLOCKCHAIN_MODE=real` without a contract address, without an RPC endpoint,
+or with `CONTRACT_ADDRESS` and `NEXT_PUBLIC_CONTRACT_ADDRESS` disagreeing — which
+would have the browser build transactions for a different contract than the
+server verifies against.
 
 ## Production considerations
 

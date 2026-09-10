@@ -244,9 +244,11 @@ model Verification {
   result         VerificationResult
   method         VerificationMethod
   /// Null for anonymous checks made from the public verification page.
+  ///
+  /// No network identifier is recorded. The public verification endpoint is
+  /// used by counterparties checking someone else's paperwork, and logging who
+  /// looked at what would be a privacy liability the product does not need.
   verifiedBy     String?
-  ipHash         String?
-  userAgent      String?
   createdAt      DateTime           @default(now())
 
   document Document? @relation(fields: [documentId], references: [id], onDelete: SetNull)

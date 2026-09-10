@@ -28,6 +28,13 @@ import { generateVerificationId } from "@/lib/verification/id";
  */
 const ID_ATTEMPTS = 8;
 
+/**
+ * Stored on a failed registration and shown on the document page, so it must
+ * never carry internal detail.
+ */
+const GENERIC_FAILURE_MESSAGE =
+  "The blockchain proof could not be created.";
+
 async function reserveVerificationId(
   tx: Prisma.TransactionClient,
 ): Promise<string> {
@@ -158,13 +165,18 @@ export async function registerDocumentProof(input: {
       return confirmed;
     });
   } catch (error) {
-    const reason =
-      error instanceof Error ? error.message : "Unknown blockchain error";
+    // `errorMessage` is rendered on the document page, so only text written for
+    // a user goes in it. The underlying error is logged instead — a raw message
+    // can carry a connection string, a file path or a query fragment.
+    console.error("[registrations] Anchoring failed:", error);
 
     await prisma.$transaction(async (tx) => {
       await tx.blockchainRegistration.update({
         where: { id: registration.id },
-        data: { status: RegistrationStatus.FAILED, errorMessage: reason },
+        data: {
+          status: RegistrationStatus.FAILED,
+          errorMessage: GENERIC_FAILURE_MESSAGE,
+        },
       });
       await tx.document.update({
         where: { id: document.id },
@@ -177,13 +189,11 @@ export async function registerDocumentProof(input: {
           organizationId: input.organizationId,
           userId: input.userId,
           documentId: document.id,
-          metadata: { reason },
         },
         tx,
       );
     });
 
-    console.error("[registrations] Anchoring failed:", error);
     throw new ApiError(
       "INTERNAL_ERROR",
       "The blockchain proof could not be created. Please try again.",
@@ -368,17 +378,21 @@ export async function confirmDocumentProof(input: {
       return confirmed;
     });
   } catch (error) {
-    const reason =
+    // Only messages written for a user are stored; anything else is logged and
+    // replaced, since `errorMessage` is shown on the document page.
+    const userFacing =
       error instanceof OnChainVerificationError
         ? error.message
-        : error instanceof Error
-          ? error.message
-          : "Unknown blockchain error";
+        : GENERIC_FAILURE_MESSAGE;
+
+    if (!(error instanceof OnChainVerificationError)) {
+      console.error("[registrations] On-chain confirmation failed:", error);
+    }
 
     await prisma.$transaction(async (tx) => {
       await tx.blockchainRegistration.update({
         where: { id: registration.id },
-        data: { status: RegistrationStatus.FAILED, errorMessage: reason },
+        data: { status: RegistrationStatus.FAILED, errorMessage: userFacing },
       });
       await tx.document.update({
         where: { id: document.id },
@@ -391,7 +405,6 @@ export async function confirmDocumentProof(input: {
           organizationId: input.organizationId,
           userId: input.userId,
           documentId: document.id,
-          metadata: { reason },
         },
         tx,
       );
@@ -401,7 +414,6 @@ export async function confirmDocumentProof(input: {
       throw new ApiError("BAD_REQUEST", error.message);
     }
 
-    console.error("[registrations] On-chain confirmation failed:", error);
     throw new ApiError(
       "INTERNAL_ERROR",
       "The blockchain proof could not be confirmed. Please try again.",

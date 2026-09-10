@@ -22,7 +22,8 @@
     "contracts:test": "npm --prefix contracts test",
     "contracts:abi": "npm --prefix contracts run compile && npm --prefix contracts run export-abi",
     "contracts:deploy": "npm --prefix contracts run deploy:baseSepolia",
-    "test:all": "npm test && npm run contracts:test"
+    "test:all": "npm test && npm run contracts:test",
+    "preflight": "node scripts/preflight.mjs"
   },
   "dependencies": {
     "@prisma/client": "^6.2.1",

@@ -1,6 +1,11 @@
 import { VerificationMethod } from "@prisma/client";
 
-import { apiSuccess, withErrorHandling } from "@/lib/api/response";
+import { clientKey } from "@/lib/api/rate-limit";
+import {
+  apiSuccess,
+  enforceRateLimit,
+  withErrorHandling,
+} from "@/lib/api/response";
 import { getCurrentUser } from "@/lib/auth/session";
 import {
   findProofByVerificationId,
@@ -14,7 +19,12 @@ type RouteContext = { params: Promise<{ verificationId: string }> };
  * product. Only non-sensitive fields are returned; see `PublicProof`.
  */
 export const GET = withErrorHandling(
-  async (_request: Request, { params }: RouteContext) => {
+  async (request: Request, { params }: RouteContext) => {
+    enforceRateLimit(`verify-lookup:${clientKey(request)}`, {
+      limit: 120,
+      windowMs: 10 * 60 * 1000,
+    });
+
     const { verificationId } = await params;
 
     const outcome = await findProofByVerificationId(verificationId);

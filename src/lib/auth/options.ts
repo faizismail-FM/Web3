@@ -2,6 +2,7 @@ import type { MemberRole } from "@prisma/client";
 import type { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 
+import { rateLimit } from "@/lib/api/rate-limit";
 import { verifyPassword } from "@/lib/auth/password";
 import { prisma } from "@/lib/prisma";
 import { loginSchema } from "@/lib/validation/auth";
@@ -30,9 +31,31 @@ export const authOptions: NextAuthOptions = {
         email: { label: "Email", type: "email" },
         password: { label: "Password", type: "password" },
       },
-      async authorize(credentials) {
+      async authorize(credentials, request) {
         const parsed = loginSchema.safeParse(credentials);
         if (!parsed.success) return null;
+
+        // Throttled per account and per caller. Per account stops one address
+        // being ground down; per caller stops a spray across many accounts.
+        // Returning null here is indistinguishable from a wrong password, so a
+        // throttled attacker learns nothing about which accounts exist.
+        const forwarded = request?.headers?.["x-forwarded-for"];
+        const ip =
+          (Array.isArray(forwarded) ? forwarded[0] : forwarded)
+            ?.split(",")[0]
+            ?.trim() || "unknown";
+
+        const attempts = [
+          rateLimit(`login:email:${parsed.data.email}`, {
+            limit: 10,
+            windowMs: 15 * 60 * 1000,
+          }),
+          rateLimit(`login:ip:${ip}`, {
+            limit: 30,
+            windowMs: 15 * 60 * 1000,
+          }),
+        ];
+        if (attempts.some((attempt) => !attempt.allowed)) return null;
 
         const user = await prisma.user.findUnique({
           where: { email: parsed.data.email },

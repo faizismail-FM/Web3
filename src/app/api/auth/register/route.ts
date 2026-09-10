@@ -1,7 +1,13 @@
 import { ActivityType, Prisma } from "@prisma/client";
 import type { NextRequest } from "next/server";
 
-import { ApiError, apiSuccess, withErrorHandling } from "@/lib/api/response";
+import { clientKey } from "@/lib/api/rate-limit";
+import {
+  ApiError,
+  apiSuccess,
+  enforceRateLimit,
+  withErrorHandling,
+} from "@/lib/api/response";
 import { hashPassword } from "@/lib/auth/password";
 import { prisma } from "@/lib/prisma";
 import { recordActivity } from "@/lib/services/activity";
@@ -10,6 +16,11 @@ import { createOrganizationWithOwner } from "@/lib/services/organizations";
 import { registerSchema } from "@/lib/validation/auth";
 
 export const POST = withErrorHandling(async (request: NextRequest) => {
+  enforceRateLimit(`register:${clientKey(request)}`, {
+    limit: 5,
+    windowMs: 60 * 60 * 1000,
+  });
+
   const body = await request.json().catch(() => {
     throw new ApiError("BAD_REQUEST", "Request body must be valid JSON.");
   });
