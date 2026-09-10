@@ -13,6 +13,7 @@ import { recordActivity } from "@/lib/services/activity";
 import { sha256 } from "@/lib/services/hashing";
 import { deleteDocumentQuietly, storeDocument } from "@/lib/services/storage";
 import type { DocumentListQuery } from "@/lib/validation/documents";
+import { normalizeVerificationId } from "@/lib/verification/id";
 
 type CreateDocumentInput = {
   organizationId: string;
@@ -145,6 +146,31 @@ const SORT_FIELDS = {
   documentType: "documentType",
 } as const;
 
+/**
+ * Builds the search clause.
+ *
+ * People search with whatever they have to hand: part of a filename, a
+ * verification id read off a printout, or a fingerprint pasted from elsewhere.
+ * All three are matched, so the box does not need a mode selector.
+ */
+function searchClause(term: string): Prisma.DocumentWhereInput {
+  const normalizedId = normalizeVerificationId(term);
+
+  return {
+    OR: [
+      { filename: { contains: term, mode: "insensitive" } },
+      { documentTypeLabel: { contains: term, mode: "insensitive" } },
+      // Fingerprints are lowercase hex; a pasted uppercase digest should match.
+      { sha256Hash: { startsWith: term.toLowerCase() } },
+      {
+        registration: {
+          verificationId: normalizedId ?? term.toUpperCase(),
+        },
+      },
+    ],
+  };
+}
+
 /** Lists documents for one organization. The scope is not optional. */
 export async function listDocuments(
   organizationId: string,
@@ -154,6 +180,7 @@ export async function listDocuments(
     organizationId,
     ...(query.status ? { status: query.status } : {}),
     ...(query.type ? { documentType: query.type } : {}),
+    ...(query.q ? searchClause(query.q) : {}),
   };
 
   const [total, documents] = await Promise.all([

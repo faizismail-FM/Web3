@@ -8,6 +8,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { ApiError } from "@/lib/api/response";
 import { hashPassword } from "@/lib/auth/password";
 import { createDocumentFromUpload, listDocuments } from "@/lib/services/documents";
+import { registerDocumentProof } from "@/lib/services/registrations";
 import { sha256 } from "@/lib/services/hashing";
 import { createOrganizationWithOwner } from "@/lib/services/organizations";
 import { resetDatabase, testPrisma } from "../helpers/db";
@@ -330,6 +331,118 @@ describe("listDocuments", () => {
       "middle.pdf",
       "zebra.pdf",
     ]);
+  });
+});
+
+describe("search", () => {
+  async function seedSearchable() {
+    const { user, organization } = await seedOrganization();
+
+    const bol = await createDocumentFromUpload({
+      organizationId: organization.id,
+      userId: user.id,
+      file: new File(["%PDF-1.7 bol"], "Bill_of_Lading_ABC123.pdf", {
+        type: "application/pdf",
+      }),
+      documentType: DocumentType.BILL_OF_LADING,
+    });
+
+    const invoice = await createDocumentFromUpload({
+      organizationId: organization.id,
+      userId: user.id,
+      file: new File(["%PDF-1.7 inv"], "Commercial_Invoice_9981.pdf", {
+        type: "application/pdf",
+      }),
+      documentType: DocumentType.COMMERCIAL_INVOICE,
+    });
+
+    const registration = await registerDocumentProof({
+      documentId: bol.id,
+      organizationId: organization.id,
+      userId: user.id,
+    });
+
+    return { user, organization, bol, invoice, registration };
+  }
+
+  const baseQuery = {
+    page: 1,
+    pageSize: 20,
+    sort: "createdAt" as const,
+    direction: "desc" as const,
+  };
+
+  it("matches part of a filename, ignoring case", async () => {
+    const { organization, invoice } = await seedSearchable();
+
+    const result = await listDocuments(organization.id, {
+      ...baseQuery,
+      q: "commercial",
+    });
+
+    expect(result.pagination.total).toBe(1);
+    expect(result.documents[0].id).toBe(invoice.id);
+  });
+
+  it("matches a verification id typed off a printout", async () => {
+    const { organization, bol, registration } = await seedSearchable();
+
+    const typed = registration.verificationId.toLowerCase().replace("-", "");
+    const result = await listDocuments(organization.id, {
+      ...baseQuery,
+      q: typed,
+    });
+
+    expect(result.pagination.total).toBe(1);
+    expect(result.documents[0].id).toBe(bol.id);
+  });
+
+  it("matches a fingerprint pasted in upper case", async () => {
+    const { organization, bol } = await seedSearchable();
+
+    const result = await listDocuments(organization.id, {
+      ...baseQuery,
+      q: bol.sha256Hash.toUpperCase(),
+    });
+
+    expect(result.pagination.total).toBe(1);
+    expect(result.documents[0].id).toBe(bol.id);
+  });
+
+  it("returns nothing for a term that matches no document", async () => {
+    const { organization } = await seedSearchable();
+
+    const result = await listDocuments(organization.id, {
+      ...baseQuery,
+      q: "packing list",
+    });
+
+    expect(result.pagination.total).toBe(0);
+  });
+
+  it("combines search with a status filter", async () => {
+    const { organization, bol } = await seedSearchable();
+
+    const registered = await listDocuments(organization.id, {
+      ...baseQuery,
+      q: "_",
+      status: DocumentStatus.REGISTERED,
+    });
+
+    expect(registered.pagination.total).toBe(1);
+    expect(registered.documents[0].id).toBe(bol.id);
+  });
+
+  it("never reaches across organizations", async () => {
+    const { bol } = await seedSearchable();
+    const other = await seedOrganization("Other Co");
+
+    const result = await listDocuments(other.organization.id, {
+      ...baseQuery,
+      q: bol.sha256Hash,
+    });
+
+    expect(result.pagination.total).toBe(0);
   });
 });
 

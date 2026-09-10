@@ -14,7 +14,7 @@ wallet, or any knowledge of blockchain technology.
 
 ## Status
 
-This project is being built in phases. **Phases 1–4 are complete.**
+This project is being built in phases. **Phases 1–5 are complete.**
 
 | Phase | Scope | Status |
 | ----- | ----- | ------ |
@@ -22,11 +22,11 @@ This project is being built in phases. **Phases 1–4 are complete.**
 | 2 | Organization management, document upload, SHA-256 hashing, document list | ✅ Complete |
 | 3 | Document details, verification ID, public verification page, QR generation | ✅ Complete |
 | 4 | Smart contract, blockchain integration, wallet connection, transactions | ⬜ Not started |
-| 5 | Dashboard, activity, search, filters, polish | ⬜ Not started |
+| 5 | Dashboard, activity, search, filters, polish | ✅ Complete |
 | 6 | Testing, security review, error handling, production cleanup | ⬜ Not started |
 
-Pages that belong to a later phase are present as navigable placeholders so the
-application shell can be used and reviewed end to end today.
+Every page in the specification is now implemented. Phase 6 covers the final
+security review, error-handling sweep and production cleanup.
 
 ---
 
@@ -276,6 +276,21 @@ SVG for display and PNG for printing. QR images are generated only for IDs that
 actually exist, so the endpoint cannot be used to mint official-looking codes
 for arbitrary text.
 
+### Searching and filtering
+
+The documents table and the activity log both filter through the **URL**, so a
+filtered view can be bookmarked, shared with a colleague, and survives a
+refresh.
+
+One search box covers all three things people actually have to hand: part of a
+filename, a verification ID read off a printout (`pc8f29a2` resolves the same as
+`PC-8F29A2`), or a fingerprint pasted from elsewhere in any case. There is no
+mode selector to get wrong.
+
+An empty result with filters applied is worded differently from an empty
+workspace — "no documents match those filters" needs a way to clear them, not an
+invitation to upload.
+
 ### Verifying a document
 
 Two ways, neither requiring an account:
@@ -335,6 +350,9 @@ The test database is migrated automatically before each run by the `pretest`
 script, so a new migration never shows up as a confusing "table does not exist"
 failure.
 
+The dashboard counts a **verified** document as **registered** too. A customer
+checking a document must not make the registered count drop.
+
 Current coverage: password hashing, role-based access control, input
 validation, display formatting, transactional account and organization
 creation, cross-organization data isolation, SHA-256 hashing, upload validation
@@ -342,7 +360,9 @@ creation, cross-organization data isolation, SHA-256 hashing, upload validation
 document listing with pagination, sorting and filtering, member role changes and
 removal, the full invitation lifecycle, verification ID generation and
 normalisation, proof registration, public proof lookup, tamper detection, and
-verification audit records, the ABI's shape, and the on-chain confirmation
+verification audit records, dashboard counts, blockchain status reporting,
+activity filtering and pagination, document search across all three key types,
+the ABI's shape, and the on-chain confirmation
 guard (reverted transactions, wrong contract, wrong document, wrong verification
 id, forged logs from another address).
 
@@ -446,6 +466,18 @@ Added in Phase 4:
   only; existing proofs stay readable and verifiable.
 - **The Solidity toolchain is not in the application's dependency tree**, so it
   cannot reach production.
+
+Added in Phase 5:
+
+- **The error boundary shows no stack trace, message or digest.** A raw error
+  can leak table names, file paths or query fragments; the detail is logged
+  server-side instead.
+- **Search and activity are organization-scoped in the `where` clause**, like
+  every other read. Activity messages contain filenames and member names, so a
+  leak there would be as bad as a leak of the documents.
+- **The blockchain status card queries the RPC endpoint** rather than assuming
+  it is reachable. "Connected" means the chain answered; a misconfigured or
+  unreachable node shows as a problem rather than a blank card.
 
 ---
 

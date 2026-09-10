@@ -21,6 +21,8 @@ export const documentListQuerySchema = z.object({
   direction: z.enum(["asc", "desc"]).default("desc"),
   status: z.nativeEnum(DocumentStatus).optional(),
   type: z.nativeEnum(DocumentType).optional(),
+  /** Free-text search across filename, verification id and fingerprint. */
+  q: z.string().trim().max(200).optional(),
 });
 
 export type UploadMetadataInput = z.infer<typeof uploadMetadataSchema>;

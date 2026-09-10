@@ -1,5 +1,10 @@
 import type { ActivityType, Prisma } from "@prisma/client";
 
+import {
+  ACTIVITY_GROUPS,
+  type ActivityListQuery,
+} from "@/lib/validation/activity";
+
 import { prisma } from "@/lib/prisma";
 
 type RecordActivityInput = {
@@ -36,3 +41,58 @@ export async function recordActivity(
     console.error("[activity] Failed to record activity log entry:", error);
   }
 }
+
+
+/**
+ * The audit trail for one organization.
+ *
+ * Scoped by organization in the `where` clause, like every other read: activity
+ * mentions filenames and member names, so a leak here would be as bad as a leak
+ * of the documents themselves.
+ */
+export async function listActivity(
+  organizationId: string,
+  query: ActivityListQuery,
+) {
+  const where: Prisma.ActivityLogWhereInput = {
+    organizationId,
+    ...(query.group
+      ? { type: { in: [...ACTIVITY_GROUPS[query.group].types] } }
+      : {}),
+    ...(query.q
+      ? { message: { contains: query.q, mode: "insensitive" } }
+      : {}),
+  };
+
+  const [total, entries] = await Promise.all([
+    prisma.activityLog.count({ where }),
+    prisma.activityLog.findMany({
+      where,
+      orderBy: { createdAt: "desc" },
+      skip: (query.page - 1) * query.pageSize,
+      take: query.pageSize,
+      select: {
+        id: true,
+        type: true,
+        message: true,
+        createdAt: true,
+        user: { select: { name: true } },
+        document: { select: { id: true, filename: true } },
+      },
+    }),
+  ]);
+
+  return {
+    entries,
+    pagination: {
+      page: query.page,
+      pageSize: query.pageSize,
+      total,
+      totalPages: Math.max(1, Math.ceil(total / query.pageSize)),
+    },
+  };
+}
+
+export type ActivityEntry = Awaited<
+  ReturnType<typeof listActivity>
+>["entries"][number];

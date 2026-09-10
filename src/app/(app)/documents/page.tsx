@@ -1,10 +1,11 @@
-import { FileText, Upload } from "lucide-react";
+import { FileText, SearchX, Upload } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
 
 import { EmptyState } from "@/components/common/empty-state";
 import { Pagination } from "@/components/common/pagination";
+import { DocumentFilters } from "@/components/documents/document-filters";
 import { DocumentsTable } from "@/components/documents/documents-table";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
@@ -37,6 +38,8 @@ export default async function DocumentsPage({
     ? await listDocuments(user.organizationId, query)
     : { documents: [], pagination: { page: 1, pageSize: query.pageSize, total: 0, totalPages: 1 } };
 
+  const hasFilters = Boolean(query.q || query.status || query.type);
+
   const uploadButton = can.uploadDocuments(user.role) ? (
     <Button asChild>
       <Link href="/documents/new">
@@ -54,7 +57,9 @@ export default async function DocumentsPage({
         actions={uploadButton}
       />
 
-      {documents.length === 0 ? (
+      {/* An empty result with filters applied is a different situation from an
+          empty workspace, and needs different wording and a different action. */}
+      {documents.length === 0 && !hasFilters ? (
         <EmptyState
           icon={FileText}
           title="No documents yet"
@@ -63,20 +68,33 @@ export default async function DocumentsPage({
         />
       ) : (
         <div className="space-y-4">
-          {/* useSearchParams in the table header requires a Suspense boundary. */}
-          <Suspense fallback={<Skeleton className="h-64 w-full" />}>
-            <DocumentsTable
-              documents={documents}
-              sort={query.sort}
-              direction={query.direction}
-            />
-            <Pagination
-              page={pagination.page}
-              totalPages={pagination.totalPages}
-              total={pagination.total}
-              pageSize={pagination.pageSize}
-            />
+          {/* useSearchParams in the filters and table header requires a
+              Suspense boundary during prerendering. */}
+          <Suspense fallback={<Skeleton className="h-10 w-full" />}>
+            <DocumentFilters />
           </Suspense>
+
+          {documents.length === 0 ? (
+            <EmptyState
+              icon={SearchX}
+              title="No documents match those filters"
+              description="Try a different search term, or clear the filters to see everything."
+            />
+          ) : (
+            <Suspense fallback={<Skeleton className="h-64 w-full" />}>
+              <DocumentsTable
+                documents={documents}
+                sort={query.sort}
+                direction={query.direction}
+              />
+              <Pagination
+                page={pagination.page}
+                totalPages={pagination.totalPages}
+                total={pagination.total}
+                pageSize={pagination.pageSize}
+              />
+            </Suspense>
+          )}
         </div>
       )}
     </>
